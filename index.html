@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0, user-scalable=no" />
+<style type="text/css">
+	html { height: 100% }
+	body { height: 100%; margin: 0; padding: 0 }
+	#map_canvas { height: 100% }
+</style>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style2.css">
+<!--jQueryライブラリ読み込み-->
+<script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
+<!--Googleマップ生成-->
+<script type="text/javascript" src="http://maps.googleapis.com/maps/api/js?&region=JP&language=ja&sensor=true"></script>
+<script type="text/javascript">
+//マップオブジェクト設定
+var mapObj;
+//大阪市役所を緯度・軽度の初期値に設定
+var kuname="大阪市";
+var kuyakusyo=kuname+"役所";
+var posX=135.502154;
+var posY=34.694062;
+//左の園リストをクリックした際に、地図上に指し示すマーカーをグローバル変数で設定
+var marker2; //markerは園のアイコンに使用しているため、あえて2にしている
+var marker2posy=posY;
+var marker2posx=posX;
+//小中学校あわせた全マーカーと円の配列（表示、非表示で操作するため）
+var allmarkers = new Array();
+var allcircles = new Array();
+var allcircles2 = new Array();
+//マップ作成
+google.maps.event.addDomListener(window, 'load', function(){
+	//初期設定
+	var map = document.getElementById("map_canvas");
+	var options = {
+		zoom: 15,
+		center: new google.maps.LatLng(posY, posX),
+		mapTypeId: google.maps.MapTypeId.ROADMAP
+	};
+	mapObj = new google.maps.Map(map, options);  
+	//市役所を中心に設定
+	var pos = new google.maps.LatLng(posY, posX);
+	var infowindow = new google.maps.InfoWindow({ map: mapObj, position: pos, content: kuyakusyo});
+	mapObj.setCenter(pos);
+	//CSVファイル読み込み
+	var xhr = new XMLHttpRequest();
+	xhr.onload = function(){
+		var tempArray = xhr.responseText.split("\n");
+		//
+		csvArray = new Array();
+		for(var i=0;i<tempArray.length;i++){
+			csvArray[i] = tempArray[i].split(",");
+			var data = csvArray[i];
+			//マーカー作成　画像ファイルを読み込み
+			var image;
+			if (data[10]=="小学校") {
+			    image = 'icon_elementary.png';
+			} else if (data[10]=="中学校") {
+			    image = 'icon_junior.png';
+			}
+			var marker_image = new google.maps.MarkerImage(
+				image,
+				//画像サイズ
+				new google.maps.Size(32,32),
+				//画像描画開始位置
+				new google.maps.Point(0,0),
+				//基準点
+				new google.maps.Point(15,15)
+			);
+			var marker = new google.maps.Marker({
+				position: new google.maps.LatLng( parseFloat(data[1]), parseFloat(data[0]) ),
+				map: mapObj,
+				icon: marker_image,
+				title: data[2]
+			});
+			//生成したマーカーをグローバル配列に保存
+			marker.category = data[10];
+			allmarkers.push(marker);
+			//csvファイル　施設名:data[2] ひらがな:data[3] 所在地:data[4] TEL:data[6] URL:data[9] 地区名:data[5] 緯度:data[1] 経度:data[0] 小分類:data[10] 生徒数H27:data[13] 生徒数H23:data[14]
+			attachMessage(marker, data[2], data[3], data[4], data[6], data[9], data[5], data[1], data[0], data[10], data[13], data[14]);
+			//円グラフ　生成
+			//H23生徒数
+			var radius_origin = parseFloat(data[14]);
+			var radius_draw = radius_origin*1;
+			//小学校は緑の円
+			if (data[10]=="小学校"){
+				var cOpt2 = {
+					center: new google.maps.LatLng( parseFloat(data[1]), parseFloat(data[0])),
+					radius: radius_draw,
+					strokeWeight: 3,
+					strokeColor: "#005500",
+					strokeOpacity: 0.5,
+					fillColor: "#00ff00",
+					fillOpacity: 0.4
+				};
+			} else {
+			//中学校はだいだい色の円
+				var cOpt2 = {
+					center: new google.maps.LatLng( parseFloat(data[1]), parseFloat(data[0])),
+					radius: radius_draw,
+					strokeWeight: 3,
+					strokeColor: "#550055",
+					strokeOpacity: 0.5,
+					fillColor: "#ff00ff",
+					fillOpacity: 0.4
+				};
+			}
+			var circle2 = new google.maps.Circle(cOpt2);
+			circle2.setMap(mapObj);
+			//初期設置は非表示
+			circle2.setVisible(false);
+			//生成した円をグローバル配列に保存
+			circle2.category = data[10];
+			allcircles2.push(circle2);
+			//H27生徒数
+			var radius_origin = parseFloat(data[13]);
+			var radius_draw = radius_origin*1;
+			//小学校は青い円
+			if (data[10]=="小学校"){
+				var cOpt = {
+					center: new google.maps.LatLng( parseFloat(data[1]), parseFloat(data[0])),
+					radius: radius_draw,
+					strokeWeight: 3,
+					strokeColor: "#000055",
+					strokeOpacity: 0.5,
+					fillColor: "#0000ff",
+					fillOpacity: 0.4
+				};
+			} else {
+			//中学校は赤い円
+				var cOpt = {
+					center: new google.maps.LatLng( parseFloat(data[1]), parseFloat(data[0])),
+					radius: radius_draw,
+					strokeWeight: 3,
+					strokeColor: "#550000",
+					strokeOpacity: 0.5,
+					fillColor: "#ff0000",
+					fillOpacity: 0.4
+				};
+			}
+			var circle = new google.maps.Circle(cOpt);
+			circle.setMap(mapObj);
+			//生成した円をグローバル配列に保存
+			circle.category = data[10];
+			allcircles.push(circle);
+		}
+	};
+	xhr.open("get", "shochugakkou.csv", true);
+	xhr.send(null);
+	//zoom_changeイベント取得
+	google.maps.event.addListener(mapObj, 'zoom_changed', function(){
+		var offsety; //マーカー経度調整
+		var zoom = mapObj.getZoom();
+		if (zoom<16) { offsety=0.001;   }
+		if (zoom==16){ offsety=0.0005;  }
+		if (zoom==17){ offsety=0.00025; }
+		if (zoom==18){ offsety=0.00015; }
+		if (zoom==19){ offsety=0.00008; }
+		if (zoom==20){ offsety=0.00004; }
+		if (zoom>20) { offsety=0.00002; }
+		var pos = new google.maps.LatLng(marker2posy+offsety, marker2posx);
+		if (marker2==null){
+			marker2 = new google.maps.Marker({ position: pos, map:mapObj });
+		} else {
+			marker2.setPosition(pos);
+		}
+	});
+});
+
+//読み込んだcsvからinfowindowと左側に表示する施設HTML生成
+function attachMessage(getmarker, name, kana, add, tel, url, area, posy, posx, category, student, studentH23) {
+	var urlstr;
+	//URLが空白の場合は、何も表示しない。あれば「施設情報」にURLを埋め込む
+	if (url=="") {
+		urlstr="";
+	} else  {
+		urlstr='<a href='+url+'>ホームページ</a></br>';
+	}
+	//Infowindow生成
+	var infowin = new google.maps.InfoWindow({ content:name+"</br>"+"住所:"+add+"</br>"+"問合せ先："+tel+"</br>"+urlstr+"</br>"+"生徒数(H23)："+studentH23+"</br>"+"生徒数(H27)："+student+"</br>"});
+	
+	//施設情報HTML生成(cssでアコーディオンにする)
+	var $name=$('<h2>'+name+'</h2>');
+	var $kana=$('<div class="content">'+kana+'</div>');
+	var $add=$('<div class="content">'+add+'</div>');
+	var $tel=$('<div class="content">'+"問合せ先："+tel+'</div>');
+	var $url=$('<div class="content">'+urlstr+'</div>');
+	var $studentH23=$('<div class="content">生徒数(H23):'+studentH23+'</div>');
+	var $student=$('<div class="content">'+"生徒数(H27):"+student+'</div>');
+	//種別ごとに表示する
+		if (category=="小学校"){
+			$('<li data-posy='+posy+' data-posx='+posx+'></li>')
+			.append($name)
+			.append($kana)
+			.append($add)
+			.append($tel)
+			.append($url)
+			.append($studentH23)
+			.append($student)
+			.appendTo('.accordion1');
+		}
+		if (category=="中学校"){
+			$('<li data-posy='+posy+' data-posx='+posx+'></li>')
+			.append($name)
+			.append($kana)
+			.append($add)
+			.append($tel)
+			.append($url)
+			.append($studentH23)
+			.append($student)
+			.appendTo('.accordion2');
+		}		
+	//マウスオーバー
+	google.maps.event.addListener(getmarker, 'mouseover', function() {
+		infowin.open(getmarker.getMap(), getmarker);
+	});
+	//マウスアウト
+	google.maps.event.addListener(getmarker, 'mouseout', function(){
+		infowin.close();
+	});
+	//クリックでリンク先へ遷移
+	/*スマホでタッチするとすぐに施設HPへジャンプしてしまうため、結局、無効化している
+	google.maps.event.addListener(getmarker, 'click', function(){
+		window.open(url);
+	});
+	*/
+	//ダブルクリックでリンク先へ遷移
+	google.maps.event.addListener(getmarker, 'dblclick', function(){
+		window.open(url);
+	});
+}
+</script>
+<script type="text/javascript">
+$(function(){
+	//学校名のアコーディオンのクリック処理
+	$('.accordion')
+	.on('click', 'li', function(){
+		var $this = $(this);
+		//コンテンツを開く
+		$this
+		.toggleClass('expanded')
+		.children('.content')
+		.slideToggle('fast');
+		//マーカー指し示す
+		var offsety; //マーカー経度調整
+		var zoom = mapObj.getZoom();
+		if (zoom<16) { offsety=0.001;   }
+		if (zoom==16){ offsety=0.0005;  }
+		if (zoom==17){ offsety=0.00025; }
+		if (zoom==18){ offsety=0.00015; }
+		if (zoom==19){ offsety=0.00008; }
+		if (zoom==20){ offsety=0.00004; }
+		if (zoom>20) { offsety=0.00002; }
+		marker2posy=$this.data('posy');
+		marker2posx=$this.data('posx');
+		var pos = new google.maps.LatLng(marker2posy+offsety, marker2posx);
+		if (marker2==null){
+			marker2 = new google.maps.Marker({ position: pos, map:mapObj });
+		} else {
+			marker2.setPosition(pos);
+		}
+		mapObj.panTo(pos);
+	});
+	//小学校アイコンのチェックボックスクリック
+	$('#小学校icon').on('click', function(){
+		//チェックをはずしたら消す
+		if (!this.checked){
+			for (var i=0;i<allmarkers.length;i++){
+				if (allmarkers[i].category=="小学校"){
+					allmarkers[i].setVisible(false);
+				}
+			}
+		} else {
+		//そうでなければチェックがついたので表示する
+			for (var i=0;i<allmarkers.length;i++){
+				if (allmarkers[i].category=="小学校"){
+					allmarkers[i].setVisible(true);
+				}
+			}
+		}
+	});
+	//小学校児童数(H27)のチェックボックスクリック
+	$('#小学校circle').on('click', function(){
+		//チェックをはずしたら消す
+		if (!this.checked){
+			for (var i=0;i<allcircles.length;i++){
+				if (allcircles[i].category=="小学校"){
+					allcircles[i].setVisible(false);
+				}
+			}
+		} else {
+		//そうでなければチェックがついたので表示する
+			for (var i=0;i<allcircles.length;i++){
+				if (allcircles[i].category=="小学校"){
+					allcircles[i].setVisible(true);
+				}
+			}
+		}
+	});
+	//小学校児童数(H23)のチェックボックスクリック
+	$('#小学校circle2').on('click', function(){
+		//チェックをはずしたら消す
+		if (!this.checked){
+			for (var i=0;i<allcircles2.length;i++){
+				if (allcircles2[i].category=="小学校"){
+					allcircles2[i].setVisible(false);
+				}
+			}
+		} else {
+		//そうでなければチェックがついたので表示する
+			for (var i=0;i<allcircles2.length;i++){
+				if (allcircles2[i].category=="小学校"){
+					allcircles2[i].setVisible(true);
+				}
+			}
+		}
+	});
+	//中学校アイコンのチェックボックスクリック
+	$('#中学校icon').on('click', function(){
+		//チェックをはずしたら消す
+		if (!this.checked){
+			for (var i=0;i<allmarkers.length;i++){
+				if (allmarkers[i].category=="中学校"){
+					allmarkers[i].setVisible(false);
+				}
+			}
+		} else {
+		//そうでなければチェックがついたので表示する
+			for (var i=0;i<allmarkers.length;i++){
+				if (allmarkers[i].category=="中学校"){
+					allmarkers[i].setVisible(true);
+				}
+			}
+		}
+	});
+	//中学校生徒数(H27)のチェックボックスクリック
+	$('#中学校circle').on('click', function(){
+		//チェックをはずしたら消す
+		if (!this.checked){
+			for (var i=0;i<allcircles.length;i++){
+				if (allcircles[i].category=="中学校"){
+					allcircles[i].setVisible(false);
+				}
+			}
+		} else {
+		//そうでなければチェックがついたので表示する
+			for (var i=0;i<allcircles.length;i++){
+				if (allcircles[i].category=="中学校"){
+					allcircles[i].setVisible(true);
+				}
+			}
+		}
+	});
+	//中学校生徒数(H23)のチェックボックスクリック
+	$('#中学校circle2').on('click', function(){
+		//チェックをはずしたら消す
+		if (!this.checked){
+			for (var i=0;i<allcircles2.length;i++){
+				if (allcircles2[i].category=="中学校"){
+					allcircles2[i].setVisible(false);
+				}
+			}
+		} else {
+		//そうでなければチェックがついたので表示する
+			for (var i=0;i<allcircles2.length;i++){
+				if (allcircles2[i].category=="中学校"){
+					allcircles2[i].setVisible(true);
+				}
+			}
+		}
+	});
+});
+</script>
+</head>
+<body>
+<div class="header">
+	<p>大阪市　小中学校</p>
+</div>
+<div class="summary">
+	<p>大阪市の小中学校マップ情報です。</p>
+</div>
+<ul class="accordion" style="float:left; width:30%">
+	<p>■小学校</p>
+	<div class="accordion1"></div>
+	<p>■中学校</p>
+	<div class="accordion2"></div>
+</ul>
+<div id="map_container">
+	<div id="map_canvas"></div>
+</div>
+<div class="fixed">
+	<label><input type="checkbox" id="小学校icon" checked="checked">小学校アイコン</label>
+	<label><input type="checkbox" id="小学校circle" checked="checked">小学校:児童数(H27)</label>
+	<label><input type="checkbox" id="小学校circle2">小学校:児童数(H23)</label>
+	<label><input type="checkbox" id="中学校icon" checked="checked">中学校アイコン</label>
+	<label><input type="checkbox" id="中学校circle" checked="checked">中学校:生徒数(H27)</label>
+	<label><input type="checkbox" id="中学校circle2">中学校:児童数(H23)</label>
+</div>
+</body>
+</html>
